@@ -1,0 +1,160 @@
+ques-1
+(
+    SELECT CITY, LENGTH(CITY) AS LEN
+    FROM STATION
+    ORDER BY LEN ASC, CITY
+    LIMIT 1
+)
+UNION
+(
+    SELECT CITY, LENGTH(CITY) AS LEN
+    FROM STATION
+    ORDER BY LEN DESC, CITY
+    LIMIT 1
+);
+
+ques-2
+SELECT MAX(POPULATION) - MIN(POPULATION) AS POPULATION_DIFFERENCE
+FROM CITY;
+
+ques-3
+SELECT ROUND(
+    SQRT(
+        POW(MIN_LAT.LAT_N - MAX_LAT.LAT_N, 2) +
+        POW(MIN_LAT.LONG_W - MAX_LAT.LONG_W, 2)
+    ), 4
+) AS DISTANCE
+FROM
+    (SELECT LAT_N, LONG_W FROM STATION ORDER BY LAT_N ASC LIMIT 1) AS MIN_LAT,
+    (SELECT LAT_N, LONG_W FROM STATION ORDER BY LAT_N DESC LIMIT 1) AS MAX_LAT;
+
+ques-4
+WITH Ordered AS (
+    SELECT LAT_N,
+           ROW_NUMBER() OVER (ORDER BY LAT_N) AS rn,
+           COUNT(*) OVER () AS cnt
+    FROM STATION
+),
+Median AS (
+    SELECT LAT_N
+    FROM Ordered
+    WHERE rn = FLOOR((cnt + 1) / 2)
+       OR rn = CEIL((cnt + 1) / 2)
+)
+SELECT ROUND(AVG(LAT_N), 4) AS MEDIAN_LAT_N
+FROM Median;
+
+ques-5
+SELECT CITY
+FROM WORLD
+WHERE CONTINENT = 'Africa';
+
+ques-6
+SELECT NAME
+FROM WORLD
+WHERE CONTINENT = 'Africa';
+
+ques-7
+
+1. STUDENTS
+Column	Type
+ID	Integer
+NAME	String
+
+2. MARKS
+Column	Type
+ID	Integer
+SUBJECT	String
+MARKS	Integer
+
+
+SELECT S.NAME
+FROM STUDENTS S
+JOIN MARKS M ON S.ID = M.ID
+WHERE M.SUBJECT = 'Math' AND M.MARKS > 75;
+
+
+ques-8
+1. Friends
+Column	Type
+ID	Integer
+Name	String
+
+2. Challenges
+Column	Type
+Friend_id	Integer
+Challenge_id	Integer
+Score	Integer
+
+
+SELECT COUNT(*) 
+FROM (
+    SELECT Friend_id
+    FROM Challenges
+    GROUP BY Friend_id
+    HAVING MIN(Score) = 100
+) AS FullScorers;
+
+
+ques-9
+
+1. WANDS
+Column	Type
+ID	INTEGER
+CODE	INTEGER
+COINS_NEEDED	INTEGER
+POWER	INTEGER
+
+2. WANDS_PROPERTY
+Column	Type
+CODE	INTEGER
+AGE	INTEGER
+IS_EVIL	INTEGER (0 or 1)
+
+
+
+SELECT W.ID, WP.AGE, W.COINS_NEEDED, W.POWER
+FROM WANDS W
+JOIN WANDS_PROPERTY WP ON W.CODE = WP.CODE
+WHERE WP.IS_EVIL = 0
+  AND W.COINS_NEEDED = (
+      SELECT MIN(W2.COINS_NEEDED)
+      FROM WANDS W2
+      JOIN WANDS_PROPERTY WP2 ON W2.CODE = WP2.CODE
+      WHERE WP2.IS_EVIL = 0
+        AND WP2.AGE = WP.AGE
+        AND W2.POWER = W.POWER
+  )
+ORDER BY W.POWER DESC, WP.AGE DESC;
+
+ques-10
+
+1. Hackers
+Column	Type
+hacker_id	INT
+name	STRING
+
+2. Submissions
+Column	Type
+submission_id	INT
+hacker_id	INT
+challenge_id	INT
+score	INT
+
+
+SELECT h.hacker_id, h.name, SUM(max_scores.max_score) AS total_score
+FROM Hackers h
+JOIN (
+    SELECT hacker_id, challenge_id, MAX(score) AS max_score
+    FROM Submissions
+    GROUP BY hacker_id, challenge_id
+) AS max_scores
+ON h.hacker_id = max_scores.hacker_id
+GROUP BY h.hacker_id, h.name
+HAVING total_score > 0
+ORDER BY total_score DESC, h.hacker_id;
+
+
+
+
+
