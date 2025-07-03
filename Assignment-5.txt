@@ -1,0 +1,176 @@
+ques - 1
+pip install pandas sqlalchemy pyarrow fastavro psycopg2-binary
+
+import pandas as pd
+from sqlalchemy import create_engine
+import pyarrow as pa
+import pyarrow.parquet as pq
+from fastavro import writer, parse_schema
+
+# 1. Database Connection
+db_type = 'postgresql'   
+user = 'your_username'
+password = 'your_password'
+host = 'localhost'
+port = '5432'           
+database = 'your_db'
+
+# Create DB URL
+db_url = f"{db_type}://{user}:{password}@{host}:{port}/{database}"
+engine = create_engine(db_url)
+
+# 2. Extract Data using SQL
+query = "SELECT * FROM your_table"
+df = pd.read_sql(query, engine)
+
+# 3. Export to CSV
+df.to_csv('output.csv', index=False)
+print("CSV file created.")
+
+# 4. Export to Parquet
+table = pa.Table.from_pandas(df)
+pq.write_table(table, 'output.parquet')
+print("Parquet file created.")
+
+# 5. Export to Avro
+def infer_avro_schema(df, name="your_table"):
+    fields = []
+    for col in df.columns:
+        dtype = df[col].dtype
+        if pd.api.types.is_integer_dtype(dtype):
+            avro_type = 'int'
+        elif pd.api.types.is_float_dtype(dtype):
+            avro_type = 'float'
+        elif pd.api.types.is_bool_dtype(dtype):
+            avro_type = 'boolean'
+        else:
+            avro_type = 'string'
+        fields.append({"name": col, "type": ["null", avro_type]})
+    return {
+        "doc": "Schema for Avro export",
+        "name": name,
+        "namespace": "export.avro",
+        "type": "record",
+        "fields": fields
+    }
+
+schema = parse_schema(infer_avro_schema(df))
+
+# Convert DataFrame to list of dicts
+records = df.where(pd.notnull(df), None).to_dict(orient='records')
+
+with open('output.avro', 'wb') as out:
+    writer(out, schema, records)
+
+print("Avro file created.")
+
+
+ques-2
+pip install schedule
+
+import schedule
+import time
+
+def run_pipeline():
+    print("Running export pipeline...")
+
+# Schedule daily at midnight
+schedule.every().day.at("00:00").do(run_pipeline)
+
+while True:
+    schedule.run_pending()
+    time.sleep(60)
+
+
+pip install watchdog
+
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import time
+import os
+
+class MyHandler(FileSystemEventHandler):
+    def on_created(self, event):
+        if event.src_path.endswith('.trigger'):
+            print("Event Triggered by file arrival!")
+            run_pipeline()  
+
+def run_pipeline():
+    print("Running pipeline...")
+
+path = "C:/path/to/watch/folder"
+event_handler = MyHandler()
+observer = Observer()
+observer.schedule(event_handler, path, recursive=False)
+observer.start()
+
+try:
+    while True:
+        time.sleep(1)
+except KeyboardInterrupt:
+    observer.stop()
+observer.join()
+
+
+ques-3
+pip install sqlalchemy pandas psycopg2-binary
+
+import pandas as pd
+from sqlalchemy import create_engine, inspect, text
+
+# 1. Configure Source and Destination DBs
+source_engine = create_engine("postgresql://source_user:source_pass@localhost:5432/source_db")
+dest_engine = create_engine("postgresql://dest_user:dest_pass@localhost:5432/dest_db")
+
+# 2. Inspect Source DB for Tables
+inspector = inspect(source_engine)
+tables = inspector.get_table_names()
+print(f"Found tables: {tables}")
+
+# 3. Loop over each table
+for table_name in tables:
+    print(f"Copying table: {table_name}")
+    
+    
+    df = pd.read_sql_table(table_name, source_engine)
+
+    df.to_sql(table_name, dest_engine, index=False, if_exists='replace')
+         print(f"Table '{table_name}' copied with {len(df)} rows.")
+
+print(" All tables copied successfully.")
+
+
+ques-4
+pip install sqlalchemy pandas psycopg2-binary 
+
+import pandas as pd
+from sqlalchemy import create_engine
+
+# 1. Database connections
+source_engine = create_engine("postgresql://user1:pass1@localhost:5432/source_db")
+dest_engine = create_engine("postgresql://user2:pass2@localhost:5432/dest_db")
+
+# 2. Define tables and columns to copy
+tables_to_copy = {
+    "customers": ["id", "name", "email"],
+    "orders": ["order_id", "customer_id", "order_date"],
+    "products": ["product_id", "product_name"]
+}
+
+# 3. Transfer loop
+for table, columns in tables_to_copy.items():
+    print(f"Copying table '{table}' with columns {columns}")
+    
+    column_str = ", ".join(columns)
+    
+    query = f"SELECT {column_str} FROM {table}"
+    df = pd.read_sql(query, source_engine)
+    
+    
+    df.to_sql(table, dest_engine, index=False, if_exists='replace')
+    print(f"Table '{table}' copied with {len(df)} rows.")
+
+print("Selective table/column migration completed.")
+
+
+
