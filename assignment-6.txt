@@ -1,0 +1,451 @@
+ques - 1
+
+Create a Sample Table in Local SQL Server
+
+
+CREATE DATABASE LocalHR;
+
+USE LocalHR;
+
+CREATE TABLE Employee (
+    ID INT PRIMARY KEY,
+    Name NVARCHAR(100),
+    Department NVARCHAR(100),
+    Salary INT
+);
+
+INSERT INTO Employee (ID, Name, Department, Salary)
+VALUES 
+(1, 'John Doe', 'HR', 50000),
+(2, 'Jane Smith', 'IT', 70000),
+(3, 'Mike Brown', 'Finance', 65000);
+
+
+ Create Target Table in Azure SQL Database
+
+CREATE TABLE EmployeeCloud (
+    ID INT PRIMARY KEY,
+    Name NVARCHAR(100),
+    Department NVARCHAR(100),
+    Salary INT
+);
+
+
+Local SQL Server Linked Service
+
+{
+  "name": "LS_Local_SQL",
+  "type": "Microsoft.DataFactory/factories/linkedservices",
+  "properties": {
+    "type": "SqlServer",
+    "typeProperties": {
+      "connectionString": "Data Source=DESKTOP-ABC123\\SQLEXPRESS;Initial Catalog=LocalHR;Integrated Security=True",
+      "userName": null,
+      "password": null
+    },
+    "connectVia": {
+      "referenceName": "SHIR-LocalGateway",
+      "type": "IntegrationRuntimeReference"
+    }
+  }
+}
+
+
+Azure SQL Database Linked Service
+{
+  "name": "LS_Azure_SQL",
+  "type": "Microsoft.DataFactory/factories/linkedservices",
+  "properties": {
+    "type": "AzureSqlDatabase",
+    "typeProperties": {
+      "connectionString": "Server=tcp:<your-azure-server>.database.windows.net,1433;Initial Catalog=<your-db-name>;Persist Security Info=False;User ID=<username>;Password=<password>;MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+    }
+  }
+}
+
+
+Source Dataset – Local SQL Server
+
+{
+  "name": "DS_Employee_Source",
+  "type": "Microsoft.DataFactory/factories/datasets",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_Local_SQL",
+      "type": "LinkedServiceReference"
+    },
+    "type": "SqlServerTable",
+    "typeProperties": {
+      "tableName": "Employee"
+    }
+  }
+}
+
+ Sink Dataset – Azure SQL Database
+
+{
+  "name": "DS_Employee_Sink",
+  "type": "Microsoft.DataFactory/factories/datasets",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_Azure_SQL",
+      "type": "LinkedServiceReference"
+    },
+    "type": "AzureSqlTable",
+    "typeProperties": {
+      "tableName": "EmployeeCloud"
+    }
+  }
+}
+
+Copy Activity Pipeline JSON
+
+{
+  "name": "PL_Copy_Employee",
+  "properties": {
+    "activities": [
+      {
+        "name": "CopyFromLocalToAzureSQL",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "DS_Employee_Source",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "DS_Employee_Sink",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "SqlSource"
+          },
+          "sink": {
+            "type": "SqlSink"
+          }
+        }
+      }
+    ]
+  }
+}
+
+
+
+
+ques-2
+
+Linked Service for SFTP
+{
+  "name": "LS_SFTP",
+  "type": "Microsoft.DataFactory/factories/linkedservices",
+  "properties": {
+    "type": "Sftp",
+    "typeProperties": {
+      "host": "sftp.example.com",
+      "port": 22,
+      "authenticationType": "Basic",
+      "userName": "ftp_user",
+      "password": {
+        "type": "SecureString",
+        "value": "ftp_pass"
+      }
+    }
+  }
+}
+
+Linked Service for Destination (e.g., Azure Blob Storage)
+{
+  "name": "LS_BlobStorage",
+  "type": "Microsoft.DataFactory/factories/linkedservices",
+  "properties": {
+    "type": "AzureBlobStorage",
+    "typeProperties": {
+      "connectionString": "DefaultEndpointsProtocol=https;AccountName=<yourStorage>;AccountKey=<yourKey>;EndpointSuffix=core.windows.net"
+    }
+  }
+}
+
+Source Dataset: SFTP CSV File
+
+
+{
+  "name": "DS_SFTP_EmployeeCSV",
+  "type": "Microsoft.DataFactory/factories/datasets",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_SFTP",
+      "type": "LinkedServiceReference"
+    },
+    "type": "DelimitedText",
+    "typeProperties": {
+      "location": {
+        "type": "SftpServerLocation",
+        "folderPath": "data",
+        "fileName": "employees.csv"
+      },
+      "columnDelimiter": ",",
+      "firstRowAsHeader": true
+    }
+  }
+}
+
+Sink Dataset: Azure Blob Storage CSV
+
+{
+  "name": "DS_Blob_EmployeeCSV",
+  "type": "Microsoft.DataFactory/factories/datasets",
+  "properties": {
+    "linkedServiceName": {
+      "referenceName": "LS_BlobStorage",
+      "type": "LinkedServiceReference"
+    },
+    "type": "DelimitedText",
+    "typeProperties": {
+      "location": {
+        "type": "AzureBlobFSLocation",
+        "folderPath": "landing-zone/employees/"
+      },
+      "fileName": "employees_copied.csv",
+      "columnDelimiter": ","
+    }
+  }
+}
+
+ADF Pipeline JSON
+
+{
+  "name": "PL_CopyFromSFTPToBlob",
+  "properties": {
+    "activities": [
+      {
+        "name": "CopyEmployeesCSV",
+        "type": "Copy",
+        "inputs": [
+          {
+            "referenceName": "DS_SFTP_EmployeeCSV",
+            "type": "DatasetReference"
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "DS_Blob_EmployeeCSV",
+            "type": "DatasetReference"
+          }
+        ],
+        "typeProperties": {
+          "source": {
+            "type": "DelimitedTextSource"
+          },
+          "sink": {
+            "type": "DelimitedTextSink"
+          }
+        }
+      }
+    ]
+  }
+}
+
+
+ques-3
+
+Create Control Table (to Store Watermark)
+CREATE TABLE WatermarkTable (
+    TableName NVARCHAR(100),
+    LastLoadedDate DATETIME
+);
+
+-- Insert initial watermark
+INSERT INTO WatermarkTable VALUES ('Employee', '2000-01-01');
+
+Step 1: Lookup Last Watermark
+{
+  "name": "GetLastWatermark",
+  "type": "Lookup",
+  "typeProperties": {
+    "source": {
+      "type": "SqlSource",
+      "sqlReaderQuery": "SELECT LastLoadedDate FROM WatermarkTable WHERE TableName = 'Employee'"
+    },
+    "dataset": {
+      "referenceName": "DS_Watermark",
+      "type": "DatasetReference"
+    }
+  }
+}
+
+Step 2: Copy New Data from Source
+{
+  "name": "CopyIncrementalData",
+  "type": "Copy",
+  "inputs": [
+    {
+      "referenceName": "DS_Employee_Source",
+      "type": "DatasetReference"
+    }
+  ],
+  "outputs": [
+    {
+      "referenceName": "DS_Employee_Sink",
+      "type": "DatasetReference"
+    }
+  ],
+  "typeProperties": {
+    "source": {
+      "type": "SqlSource",
+      "sqlReaderQuery": "@concat('SELECT * FROM Employee WHERE LastUpdatedDate > ''', activity('GetLastWatermark').output.firstRow.LastLoadedDate, '''')"
+    },
+    "sink": {
+      "type": "SqlSink"
+    }
+  }
+}
+
+Step 3: Update Watermark
+{
+  "name": "UpdateWatermark",
+  "type": "StoredProcedure",
+  "dependsOn": [
+    {
+      "activity": "CopyIncrementalData",
+      "dependencyConditions": [
+        "Succeeded"
+      ]
+    }
+  ],
+  "typeProperties": {
+    "storedProcedureName": "sp_UpdateWatermark",
+    "storedProcedureParameters": {
+      "TableName": {
+        "value": "Employee",
+        "type": "String"
+      },
+      "NewWatermark": {
+        "value": "@utcNow()",
+        "type": "String"
+      }
+    }
+  },
+  "linkedServiceName": {
+    "referenceName": "LS_AzureSQL",
+    "type": "LinkedServiceReference"
+  }
+}
+
+Stored Procedure to Update Watermark
+
+
+CREATE PROCEDURE sp_UpdateWatermark
+    @TableName NVARCHAR(100),
+    @NewWatermark DATETIME
+AS
+BEGIN
+    UPDATE WatermarkTable
+    SET LastLoadedDate = @NewWatermark
+    WHERE TableName = @TableName
+END
+
+
+
+ques-4
+
+ Add a "Set Variable" activity to compute next Saturday
+
+{
+  "name": "SetTodayDate",
+  "type": "SetVariable",
+  "typeProperties": {
+    "value": "@utcNow('yyyy-MM-dd')"
+  },
+  "variables": {
+    "today": {
+      "type": "String"
+    }
+  }
+}
+
+Add "If Condition" activity to check if today is last Saturday
+
+@and(
+    equals(formatDateTime(utcNow(), 'dddd'), 'Saturday'),
+    not(equals(formatDateTime(addDays(utcNow(), 7), 'MM'), formatDateTime(utcNow(), 'MM')))
+)
+
+
+ques-5
+
+Retry on Copy Activity
+
+{
+  "name": "CopyEmployeeData",
+  "type": "Copy",
+  "typeProperties": { ... },
+  "policy": {
+    "retry": 3,
+    "retryIntervalInSeconds": 10,
+    "timeout": "00:10:00"
+  }
+}
+
+
+Retry Loop JSON
+
+{
+  "name": "Until_Retry_Copy",
+  "type": "Until",
+  "expression": {
+    "value": "@or(variables('retrySuccess'), greaterOrEquals(variables('retryCount'), 3))",
+    "type": "Expression"
+  },
+  "activities": [
+    {
+      "name": "Try_Copy_Employee",
+      "type": "Copy",
+      "dependsOn": [],
+      "typeProperties": {
+        "source": { ... },
+        "sink": { ... }
+      },
+      "policy": {
+        "timeout": "00:01:00",
+        "retry": 0
+      }
+    },
+    {
+      "name": "Wait_Before_Retry",
+      "type": "Wait",
+      "typeProperties": {
+        "waitTimeInSeconds": 10
+      }
+    },
+    {
+      "name": "IncrementRetryCount",
+      "type": "SetVariable",
+      "typeProperties": {
+        "variableName": "retryCount",
+        "value": "@add(variables('retryCount'), 1)"
+      }
+    }
+  ]
+}
+
+
+Set Variables Before Loop
+
+"variables": {
+  "retryCount": {
+    "type": "Int",
+    "defaultValue": 0
+  },
+  "retrySuccess": {
+    "type": "Bool",
+    "defaultValue": false
+  }
+}
+
+
+
+
+
