@@ -1,0 +1,51 @@
+SQL Table Creation Scripts
+-- Table: CUST_MSTR
+CREATE TABLE CUST_MSTR (
+    Col1 VARCHAR(100),
+    Col2 VARCHAR(100),
+    -- Add your actual column names
+    LoadDate DATE
+);
+
+-- Table: master_child
+CREATE TABLE master_child (
+    Col1 VARCHAR(100),
+    Col2 VARCHAR(100),
+    -- Add your actual column names
+    LoadDate DATE,
+    DateKey INT
+);
+
+-- Table: H_ECOM_Orders
+CREATE TABLE H_ECOM_Orders (
+    Col1 VARCHAR(100),
+    Col2 VARCHAR(100)
+    -- Add your actual column names
+);
+
+ADF Derived Column Expressions
+For CUST_MSTR:
+LoadDate = toDate(substringByPosition(fileName(), '_', 2), 'yyyyMMdd')
+
+
+For master_child_export:
+DateKey = toInteger(substringByPosition(fileName(), '-', 1))
+LoadDate = toDate(substringByPosition(fileName(), '-', 1), 'yyyyMMdd')
+
+
+Truncate Pre-Copy SQL Commands
+-- For CUST_MSTR
+TRUNCATE TABLE CUST_MSTR;
+
+-- For master_child
+TRUNCATE TABLE master_child;
+
+-- For H_ECOM_Orders
+TRUNCATE TABLE H_ECOM_Orders;
+
+
+ADF File Filter Logic
+@startsWith(item().name, 'CUST_MSTR_')
+@startsWith(item().name, 'master_child_export-')
+@startsWith(item().name, 'H_ECOM_ORDER')
+
