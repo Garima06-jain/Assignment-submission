@@ -1,0 +1,219 @@
+file_path = "dbfs:/mnt/nyc-taxi/yellow_tripdata_2020-01.csv"
+
+1  — Read CSV into a DataFrame
+
+from pyspark.sql.types import (StructType, StructField, IntegerType, StringType,
+                               DoubleType, TimestampType)
+
+schema = (StructType()                # abbreviated; add more fields if needed
+          .add("VendorID", IntegerType())
+          .add("tpep_pickup_datetime", TimestampType())
+          .add("tpep_dropoff_datetime", TimestampType())
+          .add("passenger_count", IntegerType())
+          .add("trip_distance", DoubleType())
+          .add("PULocationID", IntegerType())
+          .add("DOLocationID", IntegerType())
+          .add("payment_type", IntegerType())
+          .add("fare_amount", DoubleType())
+          .add("extra", DoubleType())
+          .add("mta_tax", DoubleType())
+          .add("tip_amount", DoubleType())
+          .add("tolls_amount", DoubleType())
+          .add("improvement_surcharge", DoubleType())
+          .add("total_amount", DoubleType())
+)
+
+df = (spark.read
+            .option("header", True)
+            .schema(schema)      # keeps all numeric columns as numbers
+            .csv(file_path))
+
+df.cache()      # speed up repeated queries
+df.printSchema()
+
+
+
+2  — Query 1 (Add Revenue column)
+
+from pyspark.sql import functions as F
+
+df_rev = df.withColumn(
+    "Revenue",
+    F.expr("""
+        fare_amount     + extra
+      + mta_tax         + improvement_surcharge
+      + tip_amount      + tolls_amount
+      + total_amount
+    """)
+)
+
+display(df_rev.limit(5))
+
+
+3  — Query 2 (Total passenger count by NYC area)
+
+passengers_by_area = (df_rev.groupBy("PULocationID")
+                              .agg(F.sum("passenger_count").alias("total_passengers"))
+                              .orderBy(F.desc("total_passengers")))
+
+display(passengers_by_area)
+
+
+4  — Query 3 (Realtime average fare / total earnings per vendor)
+
+avg_vendor = (df_rev.groupBy("VendorID")
+                       .agg(F.avg("fare_amount").alias("avg_fare"),
+                            F.avg("Revenue").alias("avg_revenue"))
+                       .orderBy("VendorID"))
+
+display(avg_vendor)
+
+stream_df = (spark.readStream
+                    .schema(schema)
+                    .option("header", True)
+                    .csv("dbfs:/mnt/nyc-taxi/streaming-drop/"))   # landing folder
+
+avg_vendor_stream =
+    (stream_df.groupBy(
+         F.window("tpep_pickup_datetime", "1 minute"), "VendorID")
+       .agg(F.avg("fare_amount").alias("avg_fare"),
+            F.avg("Revenue").alias("avg_revenue")))
+
+
+
+5  — Query 4 (Moving count of payments by payment mode)
+
+from pyspark.sql.window import Window
+
+w = (Window
+      .partitionBy("payment_type")
+      .orderBy("tpep_pickup_datetime")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow))
+
+df_pay_count = df_rev.withColumn("running_payment_count",
+                                 F.count("*").over(w))
+
+display(df_pay_count.select("tpep_pickup_datetime",
+                            "payment_type",
+                            "running_payment_count").limit(20))
+
+
+6  — Query 5 (Top 2 earners on a given date with passengers & distance)
+
+query_date = "2020-01-15"
+
+top2 = (df_rev.filter(F.to_date("tpep_pickup_datetime") == query_date)
+               .groupBy("VendorID")
+               .agg(F.sum("passenger_count").alias("total_passengers"),
+                    F.sum("trip_distance").alias("total_distance"),
+                    F.sum("Revenue").alias("total_revenue"))
+               .orderBy(F.desc("total_revenue"))
+               .limit(2))
+
+display(top2)
+
+
+7  — Query 6 (Route with most passengers)
+
+busiest_route = (df_rev.groupBy("PULocationID", "DOLocationID")
+                          .agg(F.sum("passenger_count").alias("passengers"))
+                          .orderBy(F.desc("passengers"))
+                          .limit(1))
+
+display(busiest_route)
+
+
+8  — Query 7 (Top pickup locations in last 5 / 10 seconds – streaming)
+
+stream_df = (spark.readStream
+                    .schema(schema)
+                    .option("header", True)
+                    .csv("dbfs:/mnt/nyc-taxi/streaming-drop/"))
+
+top_pickups = (stream_df
+                  .withWatermark("tpep_pickup_datetime", "30 seconds")
+                  .groupBy(
+                       F.window("tpep_pickup_datetime", "5 seconds"),
+                       "PULocationID")
+                  .agg(F.sum("passenger_count").alias("passengers"))
+                  .orderBy(F.desc("passengers"))
+                  .limit(10))     # top locations each 5‑sec window
+
+query = (top_pickups.writeStream
+                       .outputMode("complete")
+                       .format("console")
+                       .option("truncate", False)
+                       .start())
+
+
+
+
+
+Question -2
+
+
+Upload JSON to DBFS
+
+dbfs:/mnt/mydata/sample.json
+
+{
+  "user": {
+    "id": 1,
+    "name": "Alice",
+    "location": {
+      "city": "New York",
+      "zip": "10001"
+    }
+  },
+  "purchase": {
+    "amount": 250,
+    "currency": "USD"
+  }
+}
+
+
+Load JSON into DataFrame
+
+from pyspark.sql import SparkSession
+
+file_path = "dbfs:/mnt/mydata/sample.json"
+
+df = spark.read.option("multiline", True).json(file_path)
+df.printSchema()
+df.show(truncate=False)
+
+
+Flatten Nested JSON Fields
+
+from pyspark.sql.functions import col
+
+df_flat = df.select(
+    col("user.id").alias("user_id"),
+    col("user.name").alias("user_name"),
+    col("user.location.city").alias("city"),
+    col("user.location.zip").alias("zip"),
+    col("purchase.amount").alias("amount"),
+    col("purchase.currency").alias("currency")
+)
+
+df_flat.show(truncate=False)
+
+
+Write Flattened Data as External Parquet Table
+
+# Path to store the Parquet data (external location)
+parquet_path = "dbfs:/mnt/mydata/flattened_parquet/"
+
+# Save the flattened DataFrame as Parquet
+df_flat.write.mode("overwrite").parquet(parquet_path)
+
+# Create external table using saved parquet data
+spark.sql("""
+    CREATE TABLE IF NOT EXISTS flattened_table
+    USING parquet
+    OPTIONS (path "dbfs:/mnt/mydata/flattened_parquet/")
+""")
+
+
+
+SELECT * FROM flattened_table
